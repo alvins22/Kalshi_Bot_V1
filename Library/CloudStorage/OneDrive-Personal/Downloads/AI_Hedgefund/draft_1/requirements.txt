@@ -1,0 +1,43 @@
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Parallel computing
+ray>=2.9.0
+dask>=2023.12.0
+
+# Data validation
+pydantic>=2.0.0
+
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
+pyyaml>=6.0
+
+# API clients (for live trading)
+requests>=2.31.0
+websockets>=12.0
+cryptography>=41.0.0
+python-dotenv>=1.0.0
+py-clob-client>=0.20.0
+
+# Monitoring & utilities
+rich>=13.7.0
+
+# AI/ML (for advanced strategies)
+openai>=1.0.0
+anthropic>=0.18.0
+
+# Optional: Jupyter for notebooks
+jupyter>=1.0.0
+ipykernel>=6.27.0
