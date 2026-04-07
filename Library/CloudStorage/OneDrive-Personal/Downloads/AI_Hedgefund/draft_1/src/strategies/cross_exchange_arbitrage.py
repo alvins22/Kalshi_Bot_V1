@@ -332,18 +332,18 @@ class CrossExchangeArbitrageFinder(BaseStrategy):
         """Create trading signal from arbitrage opportunity"""
 
         if opportunity.type == "matched_pair":
-            # Buy both YES and NO
-            # Return two signals (one for each leg)
-            # For now, return a single signal with double contracts
+            # For matched pair arbitrage, return YES side signal
+            # In practice, the order execution should handle the paired trade
+            # (buy YES and NO simultaneously at the matched pair prices)
             return Signal(
                 timestamp=timestamp,
                 market_id=opportunity.market_id,
                 strategy_name=self.name,
                 direction=Direction.BUY,
-                outcome=Outcome.BOTH,  # Special case: both
-                contracts=2000,  # Will be split into 1000 YES + 1000 NO
+                outcome=Outcome.YES,  # Represents the YES leg of matched pair
+                contracts=1000,  # Size for the YES leg
                 confidence=opportunity.confidence,
-                reason=opportunity.reason,
+                reason=opportunity.reason + " (buy both YES and NO simultaneously)",
                 estimated_price=opportunity.buy_price,
             )
 

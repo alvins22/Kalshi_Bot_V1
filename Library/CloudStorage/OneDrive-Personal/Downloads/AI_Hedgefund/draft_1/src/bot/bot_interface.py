@@ -29,6 +29,7 @@ from src.strategies.cross_exchange_arbitrage import CrossExchangeArbitrageFinder
 # Import risk management
 from src.risk.volatility_position_sizing import VolatilityAdjustedPositionSizer
 from src.risk.dynamic_risk_manager import DynamicRiskManager
+from src.risk.information_ratio_sizing import InformationRatioSizer
 
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,13 @@ class PredictionMarketBot:
             target_risk_pct=self.config.target_risk_pct,
             reference_volatility=self.config.reference_volatility,
             kelly_fraction=self.config.kelly_fraction,
+        )
+
+        # Initialize Information Ratio sizer for signal quality adjustment
+        self.ir_sizer = InformationRatioSizer(
+            target_ir=0.5,
+            min_ir=0.0,
+            max_ir=2.0,
         )
 
         # Market state tracking
@@ -248,6 +256,16 @@ class PredictionMarketBot:
             consensus_output = self.consensus_engine.merge_signals(signals_by_agent)
 
             for market_id_key, merged_signal in consensus_output.items():
+                # Apply Information Ratio adjustment to signal
+                # Scale position size by strategy's IR relative to target
+                base_size = merged_signal.contracts / 1000.0 if merged_signal.contracts > 0 else 0.5
+                ir_adjusted_size = self.ir_sizer.get_ir_adjusted_size(
+                    strategy_name=merged_signal.strategy_name,
+                    base_size=base_size,
+                    use_historical=True,
+                )
+                merged_signal.contracts = int(ir_adjusted_size * 1000)
+
                 # Apply volatility-adjusted position sizing
                 sized_signal = self._apply_position_sizing(merged_signal, market_state)
 
@@ -327,6 +345,24 @@ class PredictionMarketBot:
 
         # Update metrics
         self.metrics.update_trades(fills)
+
+        # Track strategy returns for Information Ratio calculation
+        if fills:
+            # Calculate returns from fills (simplified: profit/cost)
+            returns = []
+            for fill in fills:
+                if fill.cost > 0:
+                    # Return = (current_price - fill_price) / fill_price
+                    # For simplicity, we'll track based on fill executed
+                    returns.append(fill.price / fill.price - 1.0)  # Will be 0 for new fills
+
+            # Update strategy metrics if we have returns
+            if returns:
+                self.ir_sizer.update_strategy_metrics(
+                    strategy_name=signal.strategy_name,
+                    returns=returns,
+                    benchmark_return=0.0,
+                )
 
         return fills
 

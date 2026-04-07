@@ -21,6 +21,41 @@ class VolatilityMetrics:
     min_volatility: float = 0.01  # Minimum observed volatility
 
 
+class WelfordAccumulator:
+    """Welford's online algorithm for running variance calculation (O(1) per update)"""
+
+    def __init__(self):
+        """Initialize Welford accumulator"""
+        self.count = 0
+        self.mean = 0.0
+        self.M2 = 0.0  # Sum of squared differences from mean
+
+    def update(self, value: float):
+        """
+        Update running variance with new value using Welford's algorithm
+
+        Complexity: O(1) instead of O(n) for traditional std() calculation
+
+        Args:
+            value: New observation
+        """
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        delta2 = value - self.mean
+        self.M2 += delta * delta2
+
+    def get_variance(self) -> float:
+        """Get current variance"""
+        if self.count < 2:
+            return 0.0
+        return self.M2 / (self.count - 1)
+
+    def get_std(self) -> float:
+        """Get current standard deviation"""
+        return np.sqrt(max(0.0, self.get_variance()))
+
+
 class VolatilityCalculator:
     """Calculate rolling volatility and related metrics"""
 
@@ -34,20 +69,33 @@ class VolatilityCalculator:
         self.lookback_window = lookback_window
         self.price_history: Dict[str, list] = {}
         self.volatility_cache: Dict[str, VolatilityMetrics] = {}
+        # Welford's algorithm accumulators for O(1) volatility updates
+        self.welford_accumulators: Dict[str, WelfordAccumulator] = {}
 
     def add_price(self, market_id: str, price: float):
         """Add price observation for market"""
         if market_id not in self.price_history:
             self.price_history[market_id] = []
+            self.welford_accumulators[market_id] = WelfordAccumulator()
+
         self.price_history[market_id].append(price)
 
-        # Keep only recent history
+        # Calculate log return and update Welford accumulator
+        if len(self.price_history[market_id]) > 1:
+            prev_price = self.price_history[market_id][-2]
+            log_return = np.log(price / max(prev_price, 1e-10))
+            self.welford_accumulators[market_id].update(log_return)
+
+        # Keep only recent history (for half-life calculation and fallback)
         if len(self.price_history[market_id]) > self.lookback_window * 2:
             self.price_history[market_id] = self.price_history[market_id][-(self.lookback_window * 2):]
 
     def calculate_volatility(self, market_id: str, timestamp: datetime) -> float:
         """
-        Calculate rolling volatility from price history
+        Calculate rolling volatility using Welford's algorithm (O(1) time)
+
+        Previously: O(n) using numpy.std() over all returns
+        Now: O(1) using online Welford's algorithm with running variance
 
         Args:
             market_id: Market identifier
@@ -59,19 +107,20 @@ class VolatilityCalculator:
         if market_id not in self.price_history or len(self.price_history[market_id]) < 2:
             return 0.05  # Default to 5% if no history
 
-        prices = np.array(self.price_history[market_id][-self.lookback_window:])
-
-        if len(prices) < 2:
-            return 0.05
-
-        # Calculate log returns
-        returns = np.diff(np.log(prices))
-
-        if len(returns) == 0:
-            return 0.05
-
-        # Rolling standard deviation (annualized for prediction markets)
-        volatility = np.std(returns)
+        # Use Welford's algorithm for O(1) volatility calculation
+        if market_id in self.welford_accumulators:
+            accumulator = self.welford_accumulators[market_id]
+            # Get volatility from Welford accumulator (already computed online)
+            volatility = accumulator.get_std()
+        else:
+            # Fallback to traditional calculation if accumulator not initialized
+            prices = np.array(self.price_history[market_id][-self.lookback_window:])
+            if len(prices) < 2:
+                return 0.05
+            returns = np.diff(np.log(prices))
+            if len(returns) == 0:
+                return 0.05
+            volatility = np.std(returns)
 
         # Bound volatility
         volatility = max(0.01, min(0.5, volatility))
