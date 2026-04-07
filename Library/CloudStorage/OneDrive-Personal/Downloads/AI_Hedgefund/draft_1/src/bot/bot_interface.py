@@ -30,6 +30,12 @@ from src.strategies.cross_exchange_arbitrage import CrossExchangeArbitrageFinder
 from src.risk.volatility_position_sizing import VolatilityAdjustedPositionSizer
 from src.risk.dynamic_risk_manager import DynamicRiskManager
 from src.risk.information_ratio_sizing import InformationRatioSizer
+from src.risk.extreme_value_theory import ExtremeValueTheory
+from src.risk.dynamic_correlation import DynamicConditionalCorrelation
+
+# Import Phase 3 improvements
+from src.strategies.kalman_filter_mean import KalmanFilterMeanEstimator
+from src.strategies.adf_mean_reversion import ADFStationarityTester
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +133,16 @@ class PredictionMarketBot:
             max_ir=2.0,
         )
 
+        # Initialize Phase 3 improvements
+        self.evt = ExtremeValueTheory(threshold_pct=90)
+        self.dcc = DynamicConditionalCorrelation(alpha=0.05, beta=0.94)
+        self.kalman_filter = KalmanFilterMeanEstimator(
+            process_variance=1e-4,
+            observation_variance=1.0,
+            initial_mean=0.5
+        )
+        self.adf_tester = ADFStationarityTester(max_lags=12, significance_level=0.05)
+
         # Market state tracking
         self.market_states: Dict[str, MarketState] = {}
         self.latest_tick_time: Optional[datetime] = None
@@ -215,6 +231,24 @@ class PredictionMarketBot:
         mid_price = (tick.yes_bid + tick.yes_ask) / 2
         self.position_sizer.update_volatility(tick.market_id, mid_price)
 
+        # Phase 3: Update Kalman filter for dynamic mean estimation
+        self.kalman_filter.update(tick.market_id, mid_price)
+
+        # Phase 3: Track returns for EVT tail risk
+        if hasattr(self, '_prev_prices'):
+            if tick.market_id in self._prev_prices:
+                ret = (mid_price - self._prev_prices[tick.market_id]) / max(self._prev_prices[tick.market_id], 1e-6)
+                self.evt.add_return(tick.market_id, ret)
+        if not hasattr(self, '_prev_prices'):
+            self._prev_prices = {}
+        self._prev_prices[tick.market_id] = mid_price
+
+        # Phase 3: Track correlations with DCC
+        if hasattr(self, '_returns_dict'):
+            self.dcc.add_returns(self._returns_dict)
+        if not hasattr(self, '_returns_dict'):
+            self._returns_dict = {}
+
     def process_market_tick(self, tick: MarketTick) -> List[Signal]:
         """
         Process a single market tick and generate trading signals
@@ -225,13 +259,19 @@ class PredictionMarketBot:
         2. Queued for backtesting engine
         3. Sent to live exchange
 
+        Phase 3 Enhancements:
+        - ADF stationarity filtering for mean reversion signals
+        - Kalman-filtered mean estimates for robust detection
+        - EVT tail risk assessment
+        - DCC correlation stress checking
+
         Args:
             tick: MarketTick data
 
         Returns:
             List of merged signals with risk management applied
         """
-        # Update market state
+        # Update market state (includes Phase 3: Kalman, EVT, DCC tracking)
         self.update_market_state(tick)
 
         # Get the market state
@@ -240,12 +280,44 @@ class PredictionMarketBot:
 
         market_state = self.market_states[tick.market_id]
 
+        # Phase 3: Check market stationarity for mean reversion signals
+        # ADF test helps validate that mean reversion opportunities are valid
+        is_stationary, stationarity_score = self.adf_tester.test_stationarity(tick.market_id, [
+            self._prev_prices.get(tick.market_id, 0.5)
+        ] if hasattr(self, '_prev_prices') else [0.5])
+
+        # Get Phase 3: Kalman filter estimate for market mean
+        kalman_mean = self.kalman_filter.get_mean(tick.market_id)
+        kalman_confidence = self.kalman_filter.get_confidence(tick.market_id)
+
+        # Phase 3: Get tail risk assessment
+        tail_risk_score = self.evt.get_tail_risk_score(tick.market_id)
+
+        # Phase 3: Get correlation stress
+        self.dcc.update_dcc()
+        correlation_stress = self.dcc.get_correlation_stress_score()
+
         # Generate signals from all strategies in parallel
         signals_by_agent = {}
         for name, strategy in self.strategies.items():
             try:
                 signals = strategy.generate_signals(market_state)
-                signals_by_agent[name] = signals
+
+                # Phase 3: Filter signals based on market conditions
+                filtered_signals = []
+                for signal in signals:
+                    # For mean reversion signals, check stationarity
+                    if 'mean_reversion' in name.lower() and not is_stationary and stationarity_score < 0.3:
+                        logger.debug(f"Signal filtered: {name} - market not stationary (score: {stationarity_score:.2f})")
+                        continue
+
+                    # Phase 3: Adjust confidence based on Kalman certainty
+                    if kalman_confidence > 0.5:
+                        signal.confidence = min(1.0, signal.confidence * kalman_confidence)
+
+                    filtered_signals.append(signal)
+
+                signals_by_agent[name] = filtered_signals
             except Exception as e:
                 logger.error(f"Error in strategy {name}: {e}")
                 signals_by_agent[name] = []
@@ -266,13 +338,41 @@ class PredictionMarketBot:
                 )
                 merged_signal.contracts = int(ir_adjusted_size * 1000)
 
+                # Phase 3: Apply tail risk adjustment via EVT
+                # Reduce position size if extreme tail risk detected
+                if tail_risk_score > 0.7:
+                    tail_risk_multiplier = 1.0 - (tail_risk_score * 0.3)  # 0-30% reduction
+                    merged_signal.contracts = int(merged_signal.contracts * tail_risk_multiplier)
+                    logger.debug(f"Position reduced due to tail risk: {tail_risk_score:.2f}")
+
+                # Phase 3: Apply correlation stress adjustment
+                # Reduce portfolio concentration if correlations are breaking down
+                if correlation_stress > 0.7:
+                    correlation_multiplier = 1.0 - (correlation_stress * 0.2)  # 0-20% reduction
+                    merged_signal.contracts = int(merged_signal.contracts * correlation_multiplier)
+                    logger.debug(f"Position reduced due to correlation stress: {correlation_stress:.2f}")
+
                 # Apply volatility-adjusted position sizing
                 sized_signal = self._apply_position_sizing(merged_signal, market_state)
+
+                # Phase 3: Apply EVT-based VaR limit
+                var_95 = self.evt.get_var(tick.market_id, 0.95)
+                var_99 = self.evt.get_var(tick.market_id, 0.99)
+                max_loss = abs(var_99) * sized_signal.contracts * market_state.yes_mid
+
+                # Check if position loss exceeds VaR limit
+                portfolio_value = self.portfolio.get_total_value()
+                var_limit = portfolio_value * 0.02  # 2% VaR limit
+
+                if max_loss > var_limit:
+                    size_reduction = var_limit / max(max_loss, 1.0)
+                    sized_signal.contracts = int(sized_signal.contracts * size_reduction)
+                    logger.debug(f"Position reduced due to EVT VaR limit: {max_loss:.0f} > {var_limit:.0f}")
 
                 # Apply risk management
                 allowed, reason = self.risk_manager.check_position_allowed(
                     position_size=sized_signal.contracts,
-                    portfolio_value=self.portfolio.get_total_value(),
+                    portfolio_value=portfolio_value,
                 )
 
                 if allowed:
