@@ -1,0 +1,200 @@
+# News to Market Mapping Configuration
+# Maps news articles to relevant Kalshi markets via keyword and entity matching
+
+markets:
+  # Labor Market
+  - market_id: UNEMP-24DEC
+    market_title: "Unemployment rate above 4.5% in December 2024"
+    keywords:
+      - unemployment
+      - jobless
+      - labor market
+      - nonfarm payroll
+      - employment
+      - jobs report
+      - initial claims
+      - unemployment rate
+    entities:
+      - Bureau of Labor Statistics
+      - BLS
+      - Department of Labor
+      - Federal Reserve
+    exclude_keywords:
+      - cryptocurrency
+      - stocks
+    sentiment_direction: positive_yes  # Bad jobs news (high unemployment) = YES bet
+    confidence_weight: 1.0
+
+  # Federal Reserve Rate Decision
+  - market_id: "FED-RATE-JAN25"
+    market_title: "Federal Reserve raises rates in January 2025"
+    keywords:
+      - fed funds rate
+      - federal reserve
+      - fomc
+      - interest rate
+      - monetary policy
+      - rate hike
+      - policy decision
+      - jerome powell
+    entities:
+      - Jerome Powell
+      - Federal Reserve
+      - FOMC
+      - Federal Open Market Committee
+      - Fed Chair
+    exclude_keywords: []
+    sentiment_direction: neutral  # Neutral - factual reporting
+    confidence_weight: 0.9
+
+  # Inflation Indicators
+  - market_id: "CPI-INFLATION"
+    market_title: "CPI inflation above 3% year-over-year"
+    keywords:
+      - inflation
+      - cpi
+      - consumer price index
+      - price increases
+      - inflation rate
+      - deflation
+    entities:
+      - Bureau of Labor Statistics
+      - BLS
+      - Consumer Price Index
+    exclude_keywords:
+      - cryptocurrency
+      - stock market
+    sentiment_direction: positive_yes  # High inflation = YES bet
+    confidence_weight: 0.95
+
+  # GDP Growth
+  - market_id: "GDP-GROWTH"
+    market_title: "US GDP growth above 2% annualized"
+    keywords:
+      - gdp
+      - economic growth
+      - gross domestic product
+      - economic data
+      - recession
+      - expansion
+    entities:
+      - Bureau of Economic Analysis
+      - BEA
+      - Federal Reserve
+    exclude_keywords: []
+    sentiment_direction: positive_yes  # Strong GDP = YES bet
+    confidence_weight: 0.85
+
+  # Election Results (2024)
+  - market_id: "ELECTION-2024"
+    market_title: "Republican wins 2024 US presidential election"
+    keywords:
+      - election
+      - 2024 election
+      - presidential election
+      - trump
+      - harris
+      - kamala
+      - voting
+      - election results
+      - polls
+    entities:
+      - Donald Trump
+      - Kamala Harris
+      - Republican Party
+      - Democratic Party
+    exclude_keywords:
+      - stock market
+      - cryptocurrency
+    sentiment_direction: neutral  # Factual reporting
+    confidence_weight: 0.8
+
+  # Tech Sector
+  - market_id: "TECH-EARNINGS"
+    market_title: "Top tech companies beat earnings in Q4 2024"
+    keywords:
+      - earnings
+      - quarterly results
+      - revenue
+      - profit
+      - tech earnings
+      - software earnings
+    entities:
+      - Apple
+      - Microsoft
+      - Google
+      - Amazon
+      - Tesla
+      - Meta
+      - nvidia
+    exclude_keywords: []
+    sentiment_direction: positive_yes  # Beat earnings = YES bet
+    confidence_weight: 0.75
+
+  # Healthcare Policy
+  - market_id: "HEALTHCARE-POLICY"
+    market_title: "New healthcare legislation passes in 2025"
+    keywords:
+      - healthcare
+      - medical
+      - prescription drugs
+      - insurance
+      - medicaid
+      - medicare
+      - drug prices
+      - health policy
+    entities:
+      - Congress
+      - Senate
+      - House
+      - CMS
+      - FDA
+    exclude_keywords: []
+    sentiment_direction: neutral
+    confidence_weight: 0.7
+
+  # Energy Sector
+  - market_id: "OIL-PRICE"
+    market_title: "Oil prices above $80 per barrel"
+    keywords:
+      - oil
+      - crude oil
+      - opec
+      - energy
+      - gasoline
+      - petroleum
+      - shale
+    entities:
+      - OPEC
+      - EIA
+      - Energy Information Administration
+      - Saudi Arabia
+    exclude_keywords: []
+    sentiment_direction: positive_yes  # High oil = YES bet
+    confidence_weight: 0.8
+
+  # Trade & Tariffs
+  - market_id: "TRADE-TARIFFS"
+    market_title: "New US tariffs implemented in 2025"
+    keywords:
+      - tariffs
+      - trade
+      - trade war
+      - import
+      - export
+      - protectionism
+      - trade policy
+    entities:
+      - Trump
+      - Commerce Secretary
+      - China
+      - EU
+    exclude_keywords: []
+    sentiment_direction: positive_yes  # Tariffs implemented = YES bet
+    confidence_weight: 0.8
+
+# Default configuration for markets not explicitly mapped
+defaults:
+  min_relevance_threshold: 0.5
+  confidence_weight: 0.7
+  sentiment_direction: neutral

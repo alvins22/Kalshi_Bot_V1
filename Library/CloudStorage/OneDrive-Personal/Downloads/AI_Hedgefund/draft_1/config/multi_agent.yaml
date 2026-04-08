@@ -1,0 +1,83 @@
+# Multi-Agent Trading Configuration
+# Run all 3 agents in parallel with consensus merging
+
+mode: paper
+exchange: kalshi
+initial_capital: 5000
+
+# Strategies to activate
+strategies:
+  - name: EnhancedMatchedPairArbitrage
+    enabled: true
+    params:
+      min_spread_bps: 150
+      max_position_size: 1000
+      kelly_fraction: 0.30
+      min_liquidity: 3000
+      max_execution_spread: 50
+
+  - name: ImprovedDirectionalMomentum
+    enabled: true
+    params:
+      lookback_window: 50
+      volume_threshold: 2.0
+      momentum_threshold: 0.02
+      kelly_fraction: 0.15
+      max_position_pct: 0.20
+      min_conviction: 0.65
+
+  - name: ImprovedMarketMaking
+    enabled: true
+    params:
+      base_spread_bps: 80
+      max_inventory: 5000
+      max_inventory_pct: 0.10
+
+  - name: NewsEventStrategy
+    enabled: true
+    params:
+      min_relevance: 0.6
+      min_sentiment_magnitude: 0.3
+      max_position_pct: 0.15
+
+# Consensus settings
+consensus:
+  min_agents_required: 1
+  confidence_weighting: true
+  conflict_resolution: confidence_weighted
+
+# Risk management (enforced)
+risk_limits:
+  max_position_size: 1000
+  max_daily_loss: 250
+  max_drawdown: 1000
+  max_concentration_per_market: 0.20
+  emergency_stop_on_breach: true
+
+# Portfolio rebalancing
+rebalancing:
+  enabled: true
+  schedule:
+    frequency: daily
+    time_of_day: "09:00"
+  drift_threshold_pct: 0.05
+  strategy_allocations:
+    arbitrage: {target: 0.40, min: 0.30, max: 0.50}
+    momentum: {target: 0.30, min: 0.20, max: 0.40}
+    market_making: {target: 0.20, min: 0.10, max: 0.30}
+    news_event: {target: 0.10, min: 0.05, max: 0.20}
+
+# API Resilience
+api_resilience:
+  enabled: true
+  use_resilient_clients: true
+
+# News Event Trading
+news_trading:
+  enabled: true
+  config_file: config/news_event.yaml
+  market_mapping_file: config/news_market_mapping.yaml
+
+# Logging
+logging_level: INFO
+log_dir: ./logs

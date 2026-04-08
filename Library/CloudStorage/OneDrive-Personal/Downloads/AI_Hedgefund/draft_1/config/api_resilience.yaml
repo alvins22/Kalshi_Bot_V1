@@ -1,0 +1,49 @@
+# API Resilience Configuration
+# Exponential backoff, circuit breaker, and rate limiting for all API calls
+
+# Kalshi exchange settings
+kalshi:
+  retry:
+    max_attempts: 3
+    base_delay: 1.0              # 1 second base delay
+    max_delay: 60.0              # Max 60 second delay
+    jitter: true                 # Use full jitter for decorrelated backoff
+
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 0.5       # Open after 50% failure rate
+    min_calls: 10                # Minimum calls before considering opening
+    timeout: 60.0                # Wait 60 seconds before attempting recovery
+    half_open_max_calls: 3       # Try 3 calls in half-open state
+
+  rate_limiter:
+    requests_per_second: 10.0    # Kalshi rate limit is ~100/min = 1.67/sec
+    adaptive: true               # Reduce rate by 20% on 429 errors
+    respect_retry_after: true    # Honor Retry-After header
+
+# Polymarket exchange settings
+polymarket:
+  retry:
+    max_attempts: 3
+    base_delay: 0.5
+    max_delay: 30.0
+    jitter: true
+
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 0.5
+    min_calls: 10
+    timeout: 60.0
+    half_open_max_calls: 3
+
+  rate_limiter:
+    requests_per_second: 5.0     # More conservative for Polymarket
+    adaptive: true
+    respect_retry_after: true
+
+# Global settings
+global:
+  metrics_window_size: 100       # Track metrics for last 100 calls
+  log_level: INFO
+  enable_request_logging: true
+  log_response_bodies: false     # Don't log full response bodies for security

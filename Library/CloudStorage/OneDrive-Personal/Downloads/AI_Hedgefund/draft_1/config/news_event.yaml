@@ -1,0 +1,91 @@
+# News Event Trading Strategy Configuration
+# Multi-source news integration with sentiment analysis
+
+strategy:
+  name: NewsEventStrategy
+  enabled: true
+
+  # Strategy parameters
+  params:
+    min_relevance: 0.6           # Only trade news with >60% relevance score
+    min_sentiment_magnitude: 0.3  # Only trade if sentiment magnitude >0.3
+    max_position_pct: 0.15       # Max 15% of capital per news trade
+
+    # Signal generation timeframes
+    breaking_news_window_minutes: 30      # Trade news within 30 min of publication
+    pre_event_hours_ahead: 24             # Position 12-24 hours before events
+    pre_event_min_hours: 12
+    pre_event_max_hours: 24
+
+    # Sentiment tracking
+    sentiment_history_size: 100  # Track sentiment for last 100 articles
+    sentiment_trend_threshold: 0.2  # Require 0.2+ sentiment trend for signal
+
+# News API Configuration
+news:
+  # NewsAPI.org configuration
+  newsapi_key: ${NEWSAPI_KEY}
+  newsapi_enabled: true
+
+  # Alpha Vantage configuration
+  alphavantage_key: ${ALPHAVANTAGE_KEY}
+  alphavantage_enabled: true
+
+  # Caching
+  cache_ttl: 300               # 5 minute cache TTL
+
+  # Topics to monitor
+  topics:
+    - Federal Reserve
+    - unemployment
+    - inflation
+    - interest rates
+    - elections
+    - GDP
+    - PMI
+    - CPI
+    - FOMC
+    - economic data
+
+# Sentiment Analysis Configuration
+sentiment:
+  # Analyzer type
+  primary_analyzer: vader      # Fast rule-based sentiment (VADER)
+  use_transformer: false       # Set to true for DistilRoBERTa (slower but more accurate)
+
+  # VADER configuration
+  vader:
+    enabled: true
+    fallback_on_error: true
+
+  # Optional transformer configuration (slow)
+  transformer:
+    model: distilbert-base-uncased-finetuned-sst-2-english
+    batch_size: 32
+    max_text_length: 512
+
+  # Confidence calibration
+  confidence:
+    high_sentiment_threshold: 0.7    # Use 0.85 confidence if |sentiment| > 0.7
+    medium_sentiment_threshold: 0.3  # Use 0.65 confidence if 0.3 < |sentiment| <= 0.7
+    low_sentiment_confidence: 0.4    # Use 0.4 confidence for weak signals
+    min_text_length_words: 5         # Require at least 5 words for confidence
+
+# Market Mapping Configuration
+mapping:
+  # Keyword matching weights
+  keyword_weight: 0.4
+  entity_weight: 0.6
+  semantic_weight: 0.0         # Set to 0.2 to enable semantic similarity
+
+  # Relevance threshold
+  min_relevance_threshold: 0.5
+
+  # Configure market-specific mappings in news_market_mapping.yaml
+
+# Risk settings
+risk:
+  max_position_pct: 0.15       # Max 15% of portfolio per trade
+  min_confidence_for_trade: 0.55  # Only trade with >55% confidence
+  use_risk_committee_approval: true  # Require RiskCommittee approval
+  emergency_disable: false     # Set to true to disable strategy entirely

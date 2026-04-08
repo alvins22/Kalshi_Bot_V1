@@ -1,0 +1,60 @@
+# Portfolio Rebalancing Configuration
+# Drift-based and periodic rebalancing with correlation constraints
+
+rebalancing:
+  enabled: true
+
+  # Rebalancing schedule
+  schedule:
+    frequency: daily
+    time_of_day: "09:00"         # UTC time (9am = 4am EST)
+
+  # Drift detection
+  drift_threshold_pct: 0.05      # Rebalance if allocation drifts 5% from target
+  min_rebalance_amount: 100      # Minimum position size for rebalancing (contracts)
+
+  # Strategy allocation targets
+  strategy_allocations:
+    arbitrage:
+      target: 0.40               # Arbitrage gets 40% of portfolio
+      min: 0.30
+      max: 0.50
+      priority: 1                # Trim last (lowest risk)
+
+    momentum:
+      target: 0.30               # Momentum gets 30%
+      min: 0.20
+      max: 0.40
+      priority: 3
+
+    market_making:
+      target: 0.20               # Market making gets 20%
+      min: 0.10
+      max: 0.30
+      priority: 2
+
+    mean_reversion:
+      target: 0.10               # Mean reversion gets 10%
+      min: 0.05
+      max: 0.20
+      priority: 4                # Trim first (highest risk)
+
+  # Correlation constraints
+  correlation:
+    enabled: true
+    max_correlation_cluster_pct: 0.40  # Max 40% in highly correlated positions
+    correlation_threshold: 0.70        # Consider positions correlated if >0.70
+
+  # Volatility-based sizing
+  volatility:
+    enabled: true
+    inverse_sizing: true         # Lower allocation in high volatility regimes
+    volatility_lookback_days: 30
+    vol_adjustment_factor: 1.0   # Multiplier for vol adjustment
+
+  # Trade execution
+  execution:
+    trim_positions_first: true   # Trim winners before adding to losers
+    sort_by_pnl: true           # Sort by profit/loss when trimming
+    order_type: market           # Use market orders for rebalancing
+    urgent_execution: true       # Execute rebalancing quickly
