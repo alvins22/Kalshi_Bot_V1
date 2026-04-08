@@ -13,6 +13,7 @@ from src.utils.trading_logger import TradingLogger, setup_trading_logger
 from src.utils.metrics_tracker import MetricsTracker
 from src.trading.trading_config import TradingConfig
 from src.trading.multi_agent_core import SignalConsensusEngine, RiskCommittee
+from src.trading.signal_profitability import SignalProfitabilityTracker
 from src.risk.portfolio_rebalancer import PortfolioRebalancer
 
 
@@ -85,6 +86,9 @@ class MultiAgentPaperTradingEngine:
         # Initialize portfolio rebalancer
         rebalancing_config = config.config_dict.get('rebalancing', {})
         self.rebalancer = PortfolioRebalancer(rebalancing_config)
+
+        # Initialize signal profitability tracker
+        self.profitability_tracker = SignalProfitabilityTracker()
 
         # Initialize exchange clients
         self.kalshi_client = kalshi_client
@@ -364,12 +368,16 @@ class MultiAgentPaperTradingEngine:
                     if market_id in self.latest_market_state:
                         market_state = self.latest_market_state[market_id]
 
+                        # Record signal for profitability tracking
+                        signal_id = self.profitability_tracker.record_signal(signal)
+                        signal.signal_id = signal_id
+
                         # Execute via simulator
                         fills = self.execution_simulator.execute([signal], market_state)
 
                         # Process fills
                         for fill in fills:
-                            await self._process_fill(fill)
+                            await self._process_fill(fill, signal_id)
 
                 await asyncio.sleep(0.5)
 
@@ -377,16 +385,25 @@ class MultiAgentPaperTradingEngine:
                 logger.error(f"Error in execution loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _process_fill(self, fill: Fill):
+    async def _process_fill(self, fill: Fill, signal_id: Optional[str] = None):
         """
         Process order fill and update portfolio + strategies
 
         Args:
             fill: Fill object
+            signal_id: Optional signal ID for profitability tracking
         """
         try:
             # Log fill
             self.trading_logger.log_fill(fill)
+
+            # Track fill in profitability tracker
+            if signal_id:
+                self.profitability_tracker.record_fill(
+                    signal_id=signal_id,
+                    fill_price=fill.filled_price,
+                    fill_timestamp=fill.timestamp,
+                )
 
             # Update portfolio
             key = f"{fill.market_id}:{fill.outcome.value}"
@@ -445,6 +462,43 @@ class MultiAgentPaperTradingEngine:
         except Exception as e:
             logger.error(f"Error processing fill: {e}", exc_info=True)
 
+    def record_market_settlement(
+        self,
+        signal_id: str,
+        market_id: str,
+        pnl: float,
+        winning_outcome: Outcome,
+    ):
+        """Record market settlement for a signal
+
+        Args:
+            signal_id: Signal ID
+            market_id: Market ID that settled
+            pnl: Realized P&L
+            winning_outcome: Market outcome (YES or NO)
+        """
+        try:
+            self.profitability_tracker.record_settlement(
+                signal_id=signal_id,
+                pnl=pnl,
+                winning_outcome=winning_outcome,
+                settlement_time=datetime.utcnow(),
+            )
+            logger.debug(
+                f"Recorded settlement for signal {signal_id[:8]}: "
+                f"market={market_id}, pnl={pnl:.2f}, outcome={winning_outcome.value}"
+            )
+        except Exception as e:
+            logger.error(f"Error recording settlement: {e}")
+
+    def get_signal_profitability_report(self) -> Dict[str, any]:
+        """Get comprehensive profitability report
+
+        Returns:
+            Dictionary with signal profitability insights
+        """
+        return self.profitability_tracker.get_dashboard_summary()
+
     async def _metrics_loop(self):
         """
         Periodic metrics tracking loop with multi-agent stats
@@ -481,12 +535,19 @@ class MultiAgentPaperTradingEngine:
 
                 self.trading_logger.log_heartbeat(metrics)
 
+                # Log profitability insights
+                profitability_summary = self.profitability_tracker.get_dashboard_summary()
+                low_quality = profitability_summary.get('low_quality_strategies', {})
+                if low_quality:
+                    logger.warning(f"Low quality strategies (accuracy < 45%): {list(low_quality.keys())}")
+
                 logger.info(
                     f"Portfolio: ${current_portfolio_value:.2f} | "
                     f"P&L: ${current_pnl:+.2f} | "
                     f"Positions: {metrics['position_count']} | "
                     f"Win Rate: {metrics['win_rate']:.1%} | "
-                    f"Agents: {len(self.strategies)}"
+                    f"Agents: {len(self.strategies)} | "
+                    f"Signal Accuracy: {profitability_summary['overall_accuracy']:.1%}"
                 )
 
                 # Log agent performance
